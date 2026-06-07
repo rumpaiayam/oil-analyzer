@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transmission Oil Color Analyzer</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f0a500">
+<meta name="description" content="Identify water contamination percentage in transmission oil from sample color">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OilAnalyzer">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root {
+  --bg: #0d1017;
+  --surface: #161b26;
+  --surface2: #1e2535;
+  --border: rgba(255,255,255,0.07);
+  --accent: #f0a500;
+  --text: #e4e8f0;
+  --muted: #8892a8;
+  --excellent: #22c55e;
+  --good: #84cc16;
+  --acceptable: #eab308;
+  --caution: #f97316;
+  --warning: #ef4444;
+  --critical: #dc2626;
+  --r: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+  line-height: 1.5;
+}
+a { color: var(--accent); }
+
+/* ── Layout ────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 1100px;
+  margin: 0 auto 24px;
+}
+.logo {
+  width: 50px; height: 50px; flex-shrink: 0;
+  background: linear-gradient(135deg, #c88000, #f0c040);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem;
+}
+h1 { font-size: 1.35rem; font-weight: 700; color: var(--accent); }
+.subtitle { font-size: 0.83rem; color: var(--muted); margin-top: 2px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+.full { grid-column: 1 / -1; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 20px;
+}
+.card-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+/* ── Upload area ───────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed rgba(240,165,0,0.28);
+  border-radius: 8px;
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.2s, background 0.2s;
+}
+.upload-zone:hover, .upload-zone.over {
+  border-color: var(--accent);
+  background: rgba(240,165,0,0.04);
+}
+.upload-zone input {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+}
+.upload-icon { font-size: 2.2rem; margin-bottom: 10px; }
+.upload-text { color: var(--muted); font-size: 0.88rem; }
+.upload-text strong { color: var(--accent); }
+
+/* ── Canvas ────────────────────────────────────────── */
+#canvasWrap {
+  display: none;
+  position: relative;
+}
+#mainCanvas {
+  width: 100%;
+  display: block;
+  border-radius: 8px;
+  cursor: crosshair;
+  image-rendering: auto;
+}
+.canvas-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 8px;
+}
+.sampled-chip {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--surface2);
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+.sampled-dot {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.15);
+  flex-shrink: 0;
+}
+
+/* ── Analyze button ────────────────────────────────── */
+.btn-analyze {
+  display: none;
+  width: 100%;
+  margin-top: 12px;
+  padding: 13px;
+  background: var(--accent);
+  color: #111;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  letter-spacing: 0.02em;
+}
+.btn-analyze:hover { opacity: 0.88; }
+.btn-analyze:active { transform: scale(0.98); }
+
+/* ── Result panel ──────────────────────────────────── */
+.empty-state {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  height: 220px; gap: 10px;
+  color: var(--muted); font-size: 0.88rem;
+}
+.empty-icon { font-size: 2.4rem; opacity: 0.3; }
+
+#resultInner { display: none; }
+
+/* swatches */
+.swatch-row { display: flex; gap: 12px; margin-bottom: 20px; }
+.swatch-box { flex: 1; text-align: center; }
+.swatch-color {
+  height: 72px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 6px;
+  transition: background 0.4s;
+}
+.swatch-name { font-size: 0.72rem; color: var(--muted); }
+.swatch-val  { font-size: 0.75rem; font-weight: 600; font-family: monospace; margin-top: 2px; }
+
+/* big number */
+.big-result {
+  text-align: center;
+  padding: 10px 0 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.big-pct { font-size: 3.2rem; font-weight: 800; line-height: 1; }
+.big-unit { font-size: 1rem; color: var(--muted); }
+.big-sub  { font-size: 0.82rem; color: var(--muted); margin-top: 4px; }
+.badge {
+  display: inline-block;
+  padding: 5px 16px; border-radius: 100px;
+  font-size: 0.8rem; font-weight: 700;
+  margin-top: 10px;
+}
+.badge-excellent  { background: rgba(34,197,94,0.14);  color: var(--excellent); }
+.badge-good       { background: rgba(132,204,22,0.14); color: var(--good); }
+.badge-acceptable { background: rgba(234,179,8,0.14);  color: var(--acceptable); }
+.badge-caution    { background: rgba(249,115,22,0.14); color: var(--caution); }
+.badge-warning    { background: rgba(239,68,68,0.14);  color: var(--warning); }
+.badge-critical   { background: rgba(220,38,38,0.14);  color: var(--critical); }
+
+.de-note { font-size: 0.72rem; color: var(--muted); margin-top: 6px; }
+
+/* scale bar */
+.scale-wrap { margin-top: 16px; }
+.scale-track {
+  height: 18px; border-radius: 100px; position: relative;
+  background: linear-gradient(to right,
+    rgb(178,115,8), rgb(202,156,54), rgb(218,188,102),
+    rgb(226,208,134), rgb(235,226,168), rgb(238,232,182),
+    rgb(242,238,198), rgb(246,242,214), rgb(252,250,240));
+}
+.scale-needle {
+  position: absolute; top: -7px;
+  width: 3px; height: 32px;
+  background: #fff;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  box-shadow: 0 0 10px rgba(255,255,255,0.6);
+  transition: left 0.55s cubic-bezier(0.34,1.2,0.64,1);
+}
+.scale-ticks {
+  display: flex; justify-content: space-between;
+  font-size: 0.67rem; color: var(--muted);
+  margin-top: 5px; padding: 0 2px;
+}
+
+/* recommendation */
+.rec-box {
+  margin-top: 14px; padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: 8px;
+  font-size: 0.8rem; color: var(--muted);
+  border-left: 3px solid var(--accent);
+}
+.rec-box strong { color: var(--text); display: block; margin-bottom: 3px; font-size: 0.78rem; }
+
+/* ── Reference chart ───────────────────────────────── */
+.ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 10px;
+}
+.ref-cell { text-align: center; }
+.ref-swatch {
+  width: 100%; aspect-ratio: 1;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 5px;
+  cursor: default;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.ref-swatch:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  z-index: 1; position: relative;
+}
+.ref-pct  { font-size: 0.72rem; font-weight: 700; }
+.ref-lbl  { font-size: 0.63rem; color: var(--muted); }
+
+/* ── Color picker fallback ─────────────────────────── */
+.manual-row {
+  display: flex; gap: 8px; align-items: center; margin-top: 12px;
+}
+.manual-row label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+#colorPicker {
+  width: 46px; height: 34px; border: none; border-radius: 6px;
+  cursor: pointer; padding: 2px; background: transparent;
+}
+.btn-use-picker {
+  flex: 1; padding: 8px 12px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text); border-radius: 6px;
+  cursor: pointer; font-size: 0.8rem; transition: border-color 0.2s;
+}
+.btn-use-picker:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="logo">🛢</div>
+  <div>
+    <h1>Transmission Oil Color Analyzer</h1>
+    <p class="subtitle">Upload a photo of your oil sample to estimate water contamination percentage</p>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- ── Left: Image upload ─────────────────────────── -->
+  <div class="card">
+    <div class="card-label">Oil Sample Image</div>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept="image/*">
+      <div class="upload-icon">📸</div>
+      <div class="upload-text">
+        <strong>Click to upload</strong> or drag &amp; drop<br>
+        <span>Photo of your oil vial, tube, or dipstick</span>
+      </div>
+    </div>
+
+    <div id="canvasWrap">
+      <canvas id="mainCanvas"></canvas>
+      <div class="canvas-hint">Click anywhere on the oil to sample that area's color</div>
+      <div class="sampled-chip" id="sampledChip">
+        <div class="sampled-dot" id="sampledDot"></div>
+        <span id="sampledLabel">Sampled color</span>
+      </div>
+    </div>
+
+    <div class="manual-row">
+      <label for="colorPicker">Or pick manually:</label>
+      <input type="color" id="colorPicker" value="#c88010">
+      <button class="btn-use-picker" id="usePickerBtn">Use this color</button>
+    </div>
+
+    <button class="btn-analyze" id="analyzeBtn">&#128269; Analyze Color</button>
+  </div>
+
+  <!-- ── Right: Results ─────────────────────────────── -->
+  <div class="card">
+    <div class="card-label">Analysis Result</div>
+
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">⚗️</div>
+      <span>Upload a sample image and press Analyze</span>
+    </div>
+
+    <div id="resultInner">
+      <div class="swatch-row">
+        <div class="swatch-box">
+          <div class="swatch-color" id="swatchDetected"></div>
+          <div class="swatch-name">Detected</div>
+          <div class="swatch-val" id="swatchDetectedVal"></div>
+        </div>
+        <div class="swatch-box">
+          <div class="swatch-color" id="swatchRef"></div>
+          <div class="swatch-name">Closest Reference</div>
+          <div class="swatch-val" id="swatchRefVal"></div>
+        </div>
+      </div>
+
+      <div class="big-result">
+        <div>
+          <span class="big-pct" id="bigPct">—</span>
+          <span class="big-unit">% water</span>
+        </div>
+        <div class="big-sub" id="bigSub"></div>
+        <div><span class="badge" id="condBadge"></span></div>
+        <div class="de-note" id="deNote"></div>
+      </div>
+
+      <div class="scale-wrap">
+        <div class="card-label" style="margin-bottom:8px">Position on contamination scale</div>
+        <div class="scale-track">
+          <div class="scale-needle" id="needle"></div>
+        </div>
+        <div class="scale-ticks">
+          <span>0%</span><span>1%</span><span>3%</span><span>5%</span><span>10%</span><span>15%</span><span>20%+</span>
+        </div>
+      </div>
+
+      <div class="rec-box">
+        <strong id="recTitle"></strong>
+        <span id="recText"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bottom: Reference chart ────────────────────── -->
+  <div class="card full">
+    <div class="card-label">Reference Color Database — Water Contamination Scale (0 – 20%)</div>
+    <div class="ref-grid" id="refGrid"></div>
+  </div>
+
+</div>
+
+<script>
+// ── Color Database ──────────────────────────────────────────────────────────
+// Each entry: { pct, rgb, label, condition, rec }
+// Colors calibrated to represent yellow/amber transmission gear oil
+// progressively emulsifying with water (milky white at high contamination).
+const DB = [
+  { pct: 0,    rgb:[178,115, 8],  label:"Clean",          condition:"excellent",
+    rec:"Oil is in excellent condition. Maintain scheduled service intervals." },
+  { pct:0.05,  rgb:[183,123,16],  label:"Trace",          condition:"excellent",
+    rec:"Negligible water present. No action needed — monitor at next service." },
+  { pct:0.1,   rgb:[189,132,25],  label:"Trace",          condition:"good",
+    rec:"Very minor moisture detected, possibly from condensation. Monitor closely." },
+  { pct:0.2,   rgb:[195,142,36],  label:"Trace",          condition:"good",
+    rec:"Trace contamination. Check seals and breather vent at next opportunity." },
+  { pct:0.3,   rgb:[201,152,48],  label:"Minor",          condition:"acceptable",
+    rec:"Minor water presence. Inspect breather, seals, and cooler lines soon." },
+  { pct:0.5,   rgb:[207,164,64],  label:"Minor",          condition:"acceptable",
+    rec:"Borderline acceptable. Schedule inspection of cooling system and gaskets." },
+  { pct:0.75,  rgb:[212,175,82],  label:"Moderate",       condition:"caution",
+    rec:"Caution: moderate contamination. Identify ingress point and plan oil change." },
+  { pct:1.0,   rgb:[217,186,100], label:"Moderate",       condition:"caution",
+    rec:"1% water significantly reduces lubrication film strength. Change oil soon." },
+  { pct:1.5,   rgb:[221,196,118], label:"Moderate",       condition:"caution",
+    rec:"Oil change recommended promptly. Inspect gearbox housing for leaks or cracks." },
+  { pct:2.0,   rgb:[225,207,135], label:"Significant",    condition:"warning",
+    rec:"WARNING: Oil heavily compromised. Change oil and diagnose ingress urgently." },
+  { pct:3.0,   rgb:[230,217,154], label:"Significant",    condition:"warning",
+    rec:"Severe emulsification. Continued operation risks bearing and gear damage." },
+  { pct:4.0,   rgb:[234,225,170], label:"High",           condition:"critical",
+    rec:"CRITICAL: Drain and flush immediately. Inspect for cooler or seal failure." },
+  { pct:5.0,   rgb:[237,231,184], label:"High",           condition:"critical",
+    rec:"CRITICAL: Do not operate. Drain oil, flush system, identify failure source." },
+  { pct:7.0,   rgb:[241,237,200], label:"Very High",      condition:"critical",
+    rec:"CRITICAL: Major ingress. Risk of catastrophic failure. Stop and inspect now." },
+  { pct:10.0,  rgb:[245,242,214], label:"Severe",         condition:"critical",
+    rec:"CRITICAL: Oil destroyed. Full drain, flush, and component inspection required." },
+  { pct:15.0,  rgb:[248,246,226], label:"Severe",         condition:"critical",
+    rec:"CRITICAL: Transmission at extreme risk. Do not operate under any conditions." },
+  { pct:20.0,  rgb:[252,250,240], label:"Extreme",        condition:"critical",
+    rec:"CRITICAL: Oil completely emulsified. Full overhaul and flush mandatory." },
+];
+
+// Condition display config
+const COND = {
+  excellent:  { cls:"badge-excellent",  text:"Excellent" },
+  good:       { cls:"badge-good",       text:"Good" },
+  acceptable: { cls:"badge-acceptable", text:"Acceptable" },
+  caution:    { cls:"badge-caution",    text:"Caution" },
+  warning:    { cls:"badge-warning",    text:"Warning" },
+  critical:   { cls:"badge-critical",  text:"Critical" },
+};
+
+// ── CIE Lab color math ──────────────────────────────────────────────────────
+function rgbToLab([r,g,b]) {
+  r /= 255; g /= 255; b /= 255;
+  const lin = v => v > 0.04045 ? ((v + 0.055) / 1.055) ** 2.4 : v / 12.92;
+  r = lin(r); g = lin(g); b = lin(b);
+  let x = (r*0.4124 + g*0.3576 + b*0.1805) / 0.95047;
+  let y = (r*0.2126 + g*0.7152 + b*0.0722) / 1.00000;
+  let z = (r*0.0193 + g*0.1192 + b*0.9505) / 1.08883;
+  const f = v => v > 0.008856 ? v ** (1/3) : 7.787*v + 16/116;
+  return [116*f(y) - 16, 500*(f(x)-f(y)), 200*(f(y)-f(z))];
+}
+function deltaE(lab1, lab2) {
+  return Math.sqrt(lab1.reduce((s,v,i) => s + (v-lab2[i])**2, 0));
+}
+
+// ── Match rgb against database, return interpolated % ──────────────────────
+function matchColor(rgb) {
+  const lab = rgbToLab(rgb);
+  const scored = DB.map(e => ({ ...e, de: deltaE(lab, rgbToLab(e.rgb)) }))
+                   .sort((a,b) => a.de - b.de);
+  const [best, second] = scored;
+  // weighted interpolation between the two nearest references
+  const w1 = second.de === 0 ? 1 : second.de / (best.de + second.de);
+  const w2 = 1 - w1;
+  const interpPct = best.pct * w1 + second.pct * w2;
+  return { best, interpPct: Math.round(interpPct * 100) / 100 };
+}
+
+// ── Build reference chart ───────────────────────────────────────────────────
+const refGrid = document.getElementById('refGrid');
+DB.forEach(e => {
+  const cell = document.createElement('div');
+  cell.className = 'ref-cell';
+  const sw = document.createElement('div');
+  sw.className = 'ref-swatch';
+  sw.style.background = `rgb(${e.rgb})`;
+  sw.title = `${e.pct}% water — ${e.label}`;
+  const p1 = document.createElement('div');
+  p1.className = 'ref-pct';
+  p1.textContent = e.pct < 1 ? `${e.pct}%` : `${e.pct}%`;
+  const p2 = document.createElement('div');
+  p2.className = 'ref-lbl';
+  p2.textContent = e.label;
+  cell.append(sw, p1, p2);
+  refGrid.appendChild(cell);
+});
+
+// ── Image & canvas ──────────────────────────────────────────────────────────
+const canvas    = document.getElementById('mainCanvas');
+const ctx       = canvas.getContext('2d');
+const canvasWrap= document.getElementById('canvasWrap');
+const uploadZone= document.getElementById('uploadZone');
+const chip      = document.getElementById('sampledChip');
+const analyzeBtn= document.getElementById('analyzeBtn');
+
+let loadedImg = null;
+let samplePt  = null; // { x, y } in canvas coords
+let sampleRgb = null;
+
+function renderCanvas() {
+  if (!loadedImg) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(loadedImg, 0, 0, canvas.width, canvas.height);
+  if (samplePt) {
+    const { x, y } = samplePt;
+    const R = 22;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x-R-8,y); ctx.lineTo(x+R+8,y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,y-R-8); ctx.lineTo(x,y+R+8); ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x-R-8,y); ctx.lineTo(x+R+8,y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,y-R-8); ctx.lineTo(x,y+R+8); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function pickColorAt(cx, cy) {
+  const r = 18;
+  const x0 = Math.max(0, cx - r), y0 = Math.max(0, cy - r);
+  const w  = Math.min(r*2, canvas.width  - x0);
+  const h  = Math.min(r*2, canvas.height - y0);
+  const data = ctx.getImageData(x0, y0, w, h).data;
+  let rr=0, gg=0, bb=0, n=data.length/4;
+  for (let i=0; i<data.length; i+=4) { rr+=data[i]; gg+=data[i+1]; bb+=data[i+2]; }
+  return [Math.round(rr/n), Math.round(gg/n), Math.round(bb/n)];
+}
+
+function loadImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      loadedImg = img;
+      const MAX = 640;
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      uploadZone.style.display = 'none';
+      canvasWrap.style.display = 'block';
+
+      // auto-sample center
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      samplePt = { x: Math.round(canvas.width/2), y: Math.round(canvas.height/2) };
+      sampleRgb = pickColorAt(samplePt.x, samplePt.y);
+      renderCanvas();
+      updateChip(sampleRgb);
+      analyzeBtn.style.display = 'block';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width  / rect.width;
+  const sy = canvas.height / rect.height;
+  samplePt  = { x: (e.clientX - rect.left)*sx, y: (e.clientY - rect.top)*sy };
+  sampleRgb = pickColorAt(samplePt.x, samplePt.y);
+  renderCanvas();
+  updateChip(sampleRgb);
+  analyzeBtn.style.display = 'block';
+});
+
+function updateChip([r,g,b]) {
+  chip.style.display = 'flex';
+  document.getElementById('sampledDot').style.background = `rgb(${r},${g},${b})`;
+  document.getElementById('sampledLabel').textContent =
+    `Sampled: rgb(${r}, ${g}, ${b})`;
+}
+
+// file input
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) loadImageFile(e.target.files[0]);
+});
+
+// drag & drop
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('over');
+  if (e.dataTransfer.files[0]) loadImageFile(e.dataTransfer.files[0]);
+});
+
+// ── Manual color picker ─────────────────────────────────────────────────────
+document.getElementById('usePickerBtn').addEventListener('click', () => {
+  const hex = document.getElementById('colorPicker').value;
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  sampleRgb = [r, g, b];
+  updateChip(sampleRgb);
+  analyzeBtn.style.display = 'block';
+  showResult(sampleRgb);
+});
+
+// ── Analyze ─────────────────────────────────────────────────────────────────
+analyzeBtn.addEventListener('click', () => {
+  if (!sampleRgb) return;
+  showResult(sampleRgb);
+});
+
+function showResult(rgb) {
+  const { best, interpPct } = matchColor(rgb);
+  const de = deltaE(rgbToLab(rgb), rgbToLab(best.rgb));
+
+  document.getElementById('emptyState').style.display  = 'none';
+  document.getElementById('resultInner').style.display = 'block';
+
+  // swatches
+  document.getElementById('swatchDetected').style.background = `rgb(${rgb})`;
+  document.getElementById('swatchRef').style.background      = `rgb(${best.rgb})`;
+  document.getElementById('swatchDetectedVal').textContent   = `rgb(${rgb.join(', ')})`;
+  document.getElementById('swatchRefVal').textContent        = `rgb(${best.rgb.join(', ')})`;
+
+  // big number
+  document.getElementById('bigPct').textContent = interpPct.toFixed(2);
+  document.getElementById('bigSub').textContent = `${best.label} contamination`;
+  document.getElementById('deNote').textContent = `Color distance ΔE = ${de.toFixed(1)} from nearest reference`;
+
+  // badge
+  const c = COND[best.condition];
+  const badge = document.getElementById('condBadge');
+  badge.textContent = c.text;
+  badge.className = `badge ${c.cls}`;
+
+  // scale needle  (log-ish mapping: 0..20% → 0..100%)
+  const pos = Math.min(interpPct / 20, 1) * 100;
+  document.getElementById('needle').style.left = `${pos}%`;
+
+  // recommendation
+  document.getElementById('recTitle').textContent = `Recommendation (${best.label}):`;
+  document.getElementById('recText').textContent  = best.rec;
+}
+
+// ── Register service worker ──────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>

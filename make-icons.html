@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<!-- Open this file in a browser ONCE to generate and download the four icon PNGs.
+     After downloading, place them in this same folder, then delete this file. -->
+<html lang="en">
+<head><meta charset="UTF-8"><title>Generate Icons</title>
+<style>
+  body { font-family: sans-serif; background:#111; color:#eee; padding:30px; }
+  button { margin:8px; padding:10px 20px; background:#f0a500; border:none;
+           border-radius:6px; font-weight:700; cursor:pointer; color:#111; }
+  canvas { border:1px solid #333; margin:8px; border-radius:8px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+</style>
+</head>
+<body>
+<h2>Icon Generator — Oil Analyzer</h2>
+<p>Click each button to download the PNG. Place all four in the <code>oil-analyzer-pwa/</code> folder.</p>
+<div class="row" id="canvases"></div>
+<div id="btns"></div>
+<script>
+const SIZES = [
+  { name:'icon-192.png',          size:192, maskable:false },
+  { name:'icon-512.png',          size:512, maskable:false },
+  { name:'icon-maskable-192.png', size:192, maskable:true  },
+  { name:'icon-maskable-512.png', size:512, maskable:true  },
+];
+
+function drawIcon(canvas, size, maskable) {
+  const ctx = canvas.getContext('2d');
+  const S = size;
+  canvas.width = S; canvas.height = S;
+
+  // background
+  const pad = maskable ? S * 0.1 : 0;
+  const bg = ctx.createLinearGradient(0,0,0,S);
+  bg.addColorStop(0, '#1e2535');
+  bg.addColorStop(1, '#0d1017');
+  if (maskable) {
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, S, S);
+  } else {
+    ctx.beginPath();
+    const r = S * 0.18;
+    ctx.moveTo(r, 0); ctx.lineTo(S-r, 0);
+    ctx.arcTo(S,0,S,r,r); ctx.lineTo(S,S-r);
+    ctx.arcTo(S,S,S-r,S,r); ctx.lineTo(r,S);
+    ctx.arcTo(0,S,0,S-r,r); ctx.lineTo(0,r);
+    ctx.arcTo(0,0,r,0,r); ctx.closePath();
+    ctx.fillStyle = bg;
+    ctx.fill();
+  }
+
+  // oil drop
+  const cx = S/2, baseY = S * (maskable ? 0.88 : 0.84);
+  const topY  = S * (maskable ? 0.16 : 0.14);
+  const halfW = S * 0.26;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx, topY);
+  ctx.bezierCurveTo(cx + halfW*0.4, topY + S*0.18,
+                    cx + halfW,      topY + S*0.38,
+                    cx + halfW,      baseY - halfW*0.6);
+  ctx.arcTo(cx + halfW, baseY, cx, baseY, halfW*0.85);
+  ctx.arcTo(cx - halfW, baseY, cx - halfW, baseY - halfW*0.6, halfW*0.85);
+  ctx.bezierCurveTo(cx - halfW,      topY + S*0.38,
+                    cx - halfW*0.4,  topY + S*0.18,
+                    cx, topY);
+  ctx.closePath();
+  const oilGrad = ctx.createLinearGradient(cx, topY, cx, baseY);
+  oilGrad.addColorStop(0,   '#f0c040');
+  oilGrad.addColorStop(0.45,'#c88010');
+  oilGrad.addColorStop(1,   '#7a4a00');
+  ctx.fillStyle = oilGrad;
+  ctx.fill();
+
+  // sheen
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(cx - halfW*0.3, topY + S*0.22, halfW*0.22, S*0.12, -0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // water lines
+  const lineY1 = baseY - S*0.07;
+  const lineY2 = baseY - S*0.03;
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = S * 0.012;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW*0.6, lineY1);
+  ctx.quadraticCurveTo(cx, lineY1 - S*0.02, cx + halfW*0.6, lineY1);
+  ctx.stroke();
+  ctx.globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW*0.45, lineY2);
+  ctx.quadraticCurveTo(cx, lineY2 - S*0.015, cx + halfW*0.45, lineY2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+const row  = document.getElementById('canvases');
+const btns = document.getElementById('btns');
+
+SIZES.forEach(({ name, size, maskable }) => {
+  const c = document.createElement('canvas');
+  c.style.width  = Math.min(size, 120) + 'px';
+  c.style.height = Math.min(size, 120) + 'px';
+  row.appendChild(c);
+  drawIcon(c, size, maskable);
+
+  const btn = document.createElement('button');
+  btn.textContent = `Download ${name}`;
+  btn.onclick = () => {
+    const a = document.createElement('a');
+    a.download = name;
+    a.href = c.toDataURL('image/png');
+    a.click();
+  };
+  btns.appendChild(btn);
+});
+</script>
+</body>
+</html>

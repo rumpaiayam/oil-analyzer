@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#161b26"/>
+  <!-- Oil drop shape -->
+  <path d="M256 80 C256 80 140 220 140 310 C140 373 192 420 256 420 C320 420 372 373 372 310 C372 220 256 80 256 80Z"
+        fill="url(#oilGrad)" opacity="0.95"/>
+  <!-- Highlight / sheen -->
+  <ellipse cx="220" cy="270" rx="28" ry="48" fill="white" opacity="0.18" transform="rotate(-15,220,270)"/>
+  <!-- Water ripple lines at bottom of drop -->
+  <path d="M190 370 Q220 355 256 370 Q292 385 322 370" stroke="white" stroke-width="5"
+        stroke-linecap="round" fill="none" opacity="0.35"/>
+  <path d="M200 392 Q228 378 256 392 Q284 406 312 392" stroke="white" stroke-width="4"
+        stroke-linecap="round" fill="none" opacity="0.22"/>
+  <!-- Percent label -->
+  <text x="256" y="490" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
+        font-size="52" font-weight="800" fill="#f0a500" opacity="0.0">%</text>
+  <defs>
+    <linearGradient id="oilGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#f0c040"/>
+      <stop offset="45%"  stop-color="#c88010"/>
+      <stop offset="100%" stop-color="#7a4a00"/>
+    </linearGradient>
+  </defs>
+</svg>
