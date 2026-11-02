@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Bay — Parking Manager</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#38bdf8">
+<meta name="description" content="Manage and monitor smart parking bays in real time — status, occupancy and plate tracking">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SmartBay">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root {
+  --bg: #0b1016;
+  --surface: #141b24;
+  --surface2: #1b2531;
+  --border: rgba(255,255,255,0.07);
+  --accent: #38bdf8;
+  --accent-dim: rgba(56,189,248,0.14);
+  --text: #e4e8f0;
+  --muted: #8892a8;
+  --available: #22c55e;
+  --occupied: #ef4444;
+  --reserved: #a855f7;
+  --maintenance: #64748b;
+  --r: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px;
+  line-height: 1.5;
+  padding-bottom: 60px;
+}
+a { color: var(--accent); }
+button { font-family: inherit; }
+
+/* ── Layout ────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 1200px;
+  margin: 0 auto 20px;
+  flex-wrap: wrap;
+}
+.logo {
+  width: 50px; height: 50px; flex-shrink: 0;
+  background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem;
+}
+.header-text { flex: 1; min-width: 180px; }
+h1 { font-size: 1.35rem; font-weight: 700; color: var(--accent); }
+.subtitle { font-size: 0.83rem; color: var(--muted); margin-top: 2px; }
+
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text); cursor: pointer;
+  font-size: 0.82rem; font-weight: 600; transition: border-color 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: #06202e; border: none; }
+.btn-primary:hover { opacity: 0.88; }
+.btn-danger { color: var(--occupied); }
+
+.container { max-width: 1200px; margin: 0 auto; }
+
+/* ── Stats row ─────────────────────────────────────── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 760px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px 16px;
+}
+.stat-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+.stat-lbl { font-size: 0.72rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-card.c-total .stat-num { color: var(--text); }
+.stat-card.c-available .stat-num { color: var(--available); }
+.stat-card.c-occupied .stat-num { color: var(--occupied); }
+.stat-card.c-reserved .stat-num { color: var(--reserved); }
+.stat-card.c-rate .stat-num { color: var(--accent); }
+
+/* ── Toolbar ───────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+}
+.search-box {
+  flex: 1; min-width: 160px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.search-box input {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--text); font-size: 0.85rem;
+}
+.search-box input::placeholder { color: var(--muted); }
+select {
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 0.82rem; cursor: pointer;
+}
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  padding: 7px 13px; border-radius: 100px; font-size: 0.78rem; font-weight: 600;
+  background: var(--surface2); color: var(--muted); cursor: pointer;
+  border: 1px solid transparent; transition: all 0.15s; user-select: none;
+}
+.chip:hover { color: var(--text); }
+.chip.active { color: var(--text); border-color: currentColor; }
+.chip[data-status="all"].active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+.chip[data-status="available"].active { background: rgba(34,197,94,0.14); color: var(--available); border-color: var(--available); }
+.chip[data-status="occupied"].active { background: rgba(239,68,68,0.14); color: var(--occupied); border-color: var(--occupied); }
+.chip[data-status="reserved"].active { background: rgba(168,85,247,0.14); color: var(--reserved); border-color: var(--reserved); }
+.chip[data-status="maintenance"].active { background: rgba(100,116,139,0.18); color: var(--maintenance); border-color: var(--maintenance); }
+
+/* ── Bay grid ──────────────────────────────────────── */
+.zone-block { margin-bottom: 22px; }
+.zone-title {
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.zone-count { font-weight: 400; color: var(--muted); opacity: 0.7; }
+
+.bay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+.bay-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--maintenance);
+  border-radius: 8px;
+  padding: 12px 10px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  min-height: 82px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.bay-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
+.bay-card.available  { border-left-color: var(--available); }
+.bay-card.occupied   { border-left-color: var(--occupied); }
+.bay-card.reserved   { border-left-color: var(--reserved); }
+.bay-card.maintenance{ border-left-color: var(--maintenance); }
+.bay-id { font-size: 0.95rem; font-weight: 700; }
+.bay-status {
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; margin-top: 6px;
+}
+.bay-card.available  .bay-status { color: var(--available); }
+.bay-card.occupied   .bay-status { color: var(--occupied); }
+.bay-card.reserved   .bay-status { color: var(--reserved); }
+.bay-card.maintenance .bay-status { color: var(--maintenance); }
+.bay-plate { font-size: 0.72rem; color: var(--muted); margin-top: 3px; font-family: monospace; }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; color: var(--muted); gap: 10px; text-align: center;
+}
+.empty-icon { font-size: 2.4rem; opacity: 0.3; }
+
+/* ── Modal ─────────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  align-items: center; justify-content: center;
+  padding: 20px; z-index: 50;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  width: 100%; max-width: 380px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { font-size: 1.05rem; margin-bottom: 16px; color: var(--accent); }
+.field { margin-bottom: 14px; }
+.field label {
+  display: block; font-size: 0.75rem; color: var(--muted);
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+}
+.field input, .field select {
+  width: 100%; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2);
+  color: var(--text); font-size: 0.9rem; outline: none;
+}
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.status-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; }
+.status-opt {
+  padding: 10px; border-radius: 8px; text-align: center; cursor: pointer;
+  font-size: 0.78rem; font-weight: 700; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--muted); transition: all 0.15s;
+}
+.status-opt.sel-available.active  { background: rgba(34,197,94,0.16);  color: var(--available);  border-color: var(--available); }
+.status-opt.sel-occupied.active   { background: rgba(239,68,68,0.16);  color: var(--occupied);   border-color: var(--occupied); }
+.status-opt.sel-reserved.active   { background: rgba(168,85,247,0.16); color: var(--reserved);    border-color: var(--reserved); }
+.status-opt.sel-maintenance.active{ background: rgba(100,116,139,0.2); color: var(--maintenance);border-color: var(--maintenance); }
+.modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+.modal-actions .btn { flex: 1; }
+.modal-meta { font-size: 0.72rem; color: var(--muted); margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="logo">🅿️</div>
+  <div class="header-text">
+    <h1>Smart Bay</h1>
+    <p class="subtitle">Real-time parking bay status &amp; occupancy manager</p>
+  </div>
+  <div class="header-actions">
+    <button class="btn" id="addZoneBtn">+ Zone</button>
+    <button class="btn btn-primary" id="addBayBtn">+ Bay</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="stats-row">
+    <div class="stat-card c-total">
+      <div class="stat-num" id="statTotal">0</div>
+      <div class="stat-lbl">Total Bays</div>
+    </div>
+    <div class="stat-card c-available">
+      <div class="stat-num" id="statAvailable">0</div>
+      <div class="stat-lbl">Available</div>
+    </div>
+    <div class="stat-card c-occupied">
+      <div class="stat-num" id="statOccupied">0</div>
+      <div class="stat-lbl">Occupied</div>
+    </div>
+    <div class="stat-card c-reserved">
+      <div class="stat-num" id="statReserved">0</div>
+      <div class="stat-lbl">Reserved</div>
+    </div>
+    <div class="stat-card c-rate">
+      <div class="stat-num" id="statRate">0%</div>
+      <div class="stat-lbl">Occupancy Rate</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" id="searchInput" placeholder="Search bay ID or plate number...">
+    </div>
+    <select id="zoneFilter"><option value="all">All Zones</option></select>
+    <div class="chip-row" id="statusChips">
+      <div class="chip active" data-status="all">All</div>
+      <div class="chip" data-status="available">Available</div>
+      <div class="chip" data-status="occupied">Occupied</div>
+      <div class="chip" data-status="reserved">Reserved</div>
+      <div class="chip" data-status="maintenance">Maintenance</div>
+    </div>
+  </div>
+
+  <div id="zonesWrap"></div>
+
+</div>
+
+<!-- ── Bay edit modal ─────────────────────────────── -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">Edit Bay</h2>
+    <input type="hidden" id="editBayId">
+
+    <div class="field">
+      <label>Bay Label</label>
+      <input type="text" id="fieldLabel" placeholder="e.g. A-01">
+    </div>
+
+    <div class="field">
+      <label>Zone</label>
+      <select id="fieldZone"></select>
+    </div>
+
+    <div class="field">
+      <label>Status</label>
+      <div class="status-grid">
+        <div class="status-opt sel-available" data-status="available">Available</div>
+        <div class="status-opt sel-occupied" data-status="occupied">Occupied</div>
+        <div class="status-opt sel-reserved" data-status="reserved">Reserved</div>
+        <div class="status-opt sel-maintenance" data-status="maintenance">Maintenance</div>
+      </div>
+    </div>
+
+    <div class="field" id="plateField">
+      <label>Vehicle Plate Number</label>
+      <input type="text" id="fieldPlate" placeholder="e.g. ABC 1234">
+    </div>
+
+    <div class="field">
+      <label>Notes</label>
+      <input type="text" id="fieldNotes" placeholder="Optional notes">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" id="cancelBtn">Cancel</button>
+      <button class="btn btn-danger" id="deleteBtn">Delete</button>
+      <button class="btn btn-primary" id="saveBtn">Save</button>
+    </div>
+    <div class="modal-meta" id="modalMeta"></div>
+  </div>
+</div>
+
+<script>
+// ── Data model ───────────────────────────────────────────────────────────
+const STORAGE_KEY = 'smartbay-data-v1';
+
+function seedData() {
+  const zones = [
+    { id: 'z1', name: 'Zone A — Ground Floor' },
+    { id: 'z2', name: 'Zone B — Level 1' },
+    { id: 'z3', name: 'Zone C — Level 2 (EV)' },
+  ];
+  const bays = [];
+  const statuses = ['available','available','occupied','available','reserved','occupied','available','maintenance'];
+  zones.forEach((z, zi) => {
+    for (let i = 1; i <= 8; i++) {
+      const st = statuses[(i + zi) % statuses.length];
+      bays.push({
+        id: `${z.id}-b${i}`,
+        zoneId: z.id,
+        label: `${z.name[5]}-${String(i).padStart(2,'0')}`,
+        status: st,
+        plate: st === 'occupied' ? `W${1000+zi*10+i} ${['AB','CD','EF'][zi]}` : '',
+        notes: '',
+        since: Date.now() - Math.floor(Math.random()*4)*3600000,
+      });
+    }
+  });
+  return { zones, bays };
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  const data = seedData();
+  saveData(data);
+  return data;
+}
+function saveData(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+}
+
+let data = loadData();
+let filters = { search: '', zone: 'all', status: 'all' };
+let editingId = null;
+
+// ── Rendering ────────────────────────────────────────────────────────────
+const zonesWrap   = document.getElementById('zonesWrap');
+const zoneFilter   = document.getElementById('zoneFilter');
+
+function statusLabel(s) {
+  return { available:'Available', occupied:'Occupied', reserved:'Reserved', maintenance:'Maintenance' }[s] || s;
+}
+
+function renderZoneFilterOptions() {
+  const cur = zoneFilter.value;
+  zoneFilter.innerHTML = '<option value="all">All Zones</option>' +
+    data.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+  zoneFilter.value = data.zones.some(z => z.id === cur) ? cur : 'all';
+}
+
+function renderFieldZoneOptions() {
+  const sel = document.getElementById('fieldZone');
+  sel.innerHTML = data.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+}
+
+function matchesFilters(bay) {
+  if (filters.zone !== 'all' && bay.zoneId !== filters.zone) return false;
+  if (filters.status !== 'all' && bay.status !== filters.status) return false;
+  if (filters.search) {
+    const q = filters.search.toLowerCase();
+    if (!bay.label.toLowerCase().includes(q) && !(bay.plate || '').toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+
+function renderStats() {
+  const total = data.bays.length;
+  const available = data.bays.filter(b => b.status === 'available').length;
+  const occupied  = data.bays.filter(b => b.status === 'occupied').length;
+  const reserved  = data.bays.filter(b => b.status === 'reserved').length;
+  const rate = total ? Math.round((occupied / total) * 100) : 0;
+  document.getElementById('statTotal').textContent     = total;
+  document.getElementById('statAvailable').textContent = available;
+  document.getElementById('statOccupied').textContent  = occupied;
+  document.getElementById('statReserved').textContent  = reserved;
+  document.getElementById('statRate').textContent      = rate + '%';
+}
+
+function renderGrid() {
+  zonesWrap.innerHTML = '';
+  const visibleZones = filters.zone === 'all' ? data.zones : data.zones.filter(z => z.id === filters.zone);
+
+  let anyVisible = false;
+
+  visibleZones.forEach(zone => {
+    const bays = data.bays.filter(b => b.zoneId === zone.id && matchesFilters(b));
+    if (bays.length === 0) return;
+    anyVisible = true;
+
+    const block = document.createElement('div');
+    block.className = 'zone-block';
+
+    const title = document.createElement('div');
+    title.className = 'zone-title';
+    title.innerHTML = `${zone.name} <span class="zone-count">(${bays.length})</span>`;
+    block.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'bay-grid';
+
+    bays.forEach(bay => {
+      const card = document.createElement('div');
+      card.className = `bay-card ${bay.status}`;
+      card.innerHTML = `
+        <div class="bay-id">${bay.label}</div>
+        <div>
+          <div class="bay-status">${statusLabel(bay.status)}</div>
+          ${bay.plate ? `<div class="bay-plate">${bay.plate}</div>` : ''}
+        </div>
+      `;
+      card.addEventListener('click', () => openModal(bay.id));
+      grid.appendChild(card);
+    });
+
+    block.appendChild(grid);
+    zonesWrap.appendChild(block);
+  });
+
+  if (!anyVisible) {
+    zonesWrap.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🅿️</div>
+        <span>No bays match your filters.</span>
+      </div>`;
+  }
+}
+
+function renderAll() {
+  renderZoneFilterOptions();
+  renderStats();
+  renderGrid();
+}
+
+// ── Modal logic ──────────────────────────────────────────────────────────
+const overlay = document.getElementById('modalOverlay');
+
+function openModal(bayId) {
+  renderFieldZoneOptions();
+  editingId = bayId || null;
+  const bay = bayId ? data.bays.find(b => b.id === bayId) : null;
+
+  document.getElementById('modalTitle').textContent = bay ? 'Edit Bay' : 'Add Bay';
+  document.getElementById('deleteBtn').style.display = bay ? 'block' : 'none';
+  document.getElementById('fieldLabel').value = bay ? bay.label : '';
+  document.getElementById('fieldZone').value  = bay ? bay.zoneId : (data.zones[0] ? data.zones[0].id : '');
+  document.getElementById('fieldPlate').value = bay ? bay.plate : '';
+  document.getElementById('fieldNotes').value = bay ? bay.notes : '';
+  setSelectedStatus(bay ? bay.status : 'available');
+  updatePlateFieldVisibility();
+
+  document.getElementById('modalMeta').textContent = bay
+    ? `Last updated: ${new Date(bay.since).toLocaleString()}`
+    : '';
+
+  overlay.classList.add('open');
+}
+
+function closeModal() {
+  overlay.classList.remove('open');
+  editingId = null;
+}
+
+let selectedStatus = 'available';
+function setSelectedStatus(s) {
+  selectedStatus = s;
+  document.querySelectorAll('.status-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.status === s);
+  });
+  updatePlateFieldVisibility();
+}
+function updatePlateFieldVisibility() {
+  document.getElementById('plateField').style.display =
+    (selectedStatus === 'occupied' || selectedStatus === 'reserved') ? 'block' : 'none';
+}
+
+document.querySelectorAll('.status-opt').forEach(el => {
+  el.addEventListener('click', () => setSelectedStatus(el.dataset.status));
+});
+
+document.getElementById('cancelBtn').addEventListener('click', closeModal);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const label = document.getElementById('fieldLabel').value.trim();
+  if (!label) { document.getElementById('fieldLabel').focus(); return; }
+  const zoneId = document.getElementById('fieldZone').value;
+  const plate  = document.getElementById('fieldPlate').value.trim();
+  const notes  = document.getElementById('fieldNotes').value.trim();
+
+  if (editingId) {
+    const bay = data.bays.find(b => b.id === editingId);
+    const statusChanged = bay.status !== selectedStatus;
+    bay.label = label; bay.zoneId = zoneId; bay.status = selectedStatus;
+    bay.plate = selectedStatus === 'occupied' || selectedStatus === 'reserved' ? plate : '';
+    bay.notes = notes;
+    if (statusChanged) bay.since = Date.now();
+  } else {
+    data.bays.push({
+      id: 'b' + Date.now(),
+      zoneId, label, status: selectedStatus,
+      plate: selectedStatus === 'occupied' || selectedStatus === 'reserved' ? plate : '',
+      notes, since: Date.now(),
+    });
+  }
+  saveData(data);
+  renderAll();
+  closeModal();
+});
+
+document.getElementById('deleteBtn').addEventListener('click', () => {
+  if (!editingId) return;
+  data.bays = data.bays.filter(b => b.id !== editingId);
+  saveData(data);
+  renderAll();
+  closeModal();
+});
+
+document.getElementById('addBayBtn').addEventListener('click', () => {
+  if (data.zones.length === 0) { alert('Create a zone first.'); return; }
+  openModal(null);
+});
+
+document.getElementById('addZoneBtn').addEventListener('click', () => {
+  const name = prompt('New zone name (e.g. "Zone D — Rooftop"):');
+  if (!name || !name.trim()) return;
+  data.zones.push({ id: 'z' + Date.now(), name: name.trim() });
+  saveData(data);
+  renderAll();
+});
+
+// ── Toolbar filters ──────────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', e => {
+  filters.search = e.target.value;
+  renderGrid();
+});
+zoneFilter.addEventListener('change', e => {
+  filters.zone = e.target.value;
+  renderGrid();
+});
+document.querySelectorAll('.chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    filters.status = chip.dataset.status;
+    renderGrid();
+  });
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────
+renderAll();
+
+// ── Register service worker ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
